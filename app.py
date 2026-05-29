@@ -15,6 +15,144 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="expanded"
 )
+def inject_custom_css():
+    st.markdown("""
+        <style>
+        /* 1. Hide default Streamlit clutter */
+        #MainMenu {visibility: hidden;}
+        footer {visibility: hidden;}
+        header {background-color: transparent !important;}
+        
+        /* 2. Global Typography & Background */
+        html, body, [class*="css"] {
+            font-family: 'Inter', 'Roboto', sans-serif;
+        }
+        
+        /* 3. Metric Cards (Glassmorphism & App-like styling) */
+        [data-testid="stMetric"] {
+            background: linear-gradient(145deg, #1e2124, #121416);
+            border-radius: 16px;
+            padding: 16px;
+            box-shadow: 0 8px 16px rgba(0, 0, 0, 0.4);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+        }
+        [data-testid="stMetric"]:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 12px 20px rgba(0, 0, 0, 0.6);
+        }
+        
+        /* Metric Label Text */
+        [data-testid="stMetricLabel"] {
+            font-size: 0.9rem !important;
+            font-weight: 500;
+            color: #a0aab5 !important;
+            margin-bottom: 4px;
+        }
+        
+        /* Metric Value Text */
+        [data-testid="stMetricValue"] {
+            font-size: 1.6rem !important;
+            font-weight: 700;
+            color: #ffffff !important;
+        }
+        
+        /* Metric Delta Text */
+        [data-testid="stMetricDelta"] {
+            font-weight: 600;
+            font-size: 0.95rem !important;
+        }
+        
+        /* 4. Tabs Styling (Sleek Navigation) */
+        [data-testid="stTabs"] [data-baseweb="tab-list"] {
+            gap: 8px;
+            background-color: #121416;
+            padding: 6px;
+            border-radius: 12px;
+            box-shadow: inset 0 2px 4px rgba(0,0,0,0.5);
+            border: none;
+        }
+        [data-testid="stTabs"] [data-baseweb="tab"] {
+            border-radius: 8px;
+            padding-top: 10px;
+            padding-bottom: 10px;
+            padding-left: 16px;
+            padding-right: 16px;
+            background-color: transparent;
+            border: none !important;
+        }
+        [data-testid="stTabs"] [aria-selected="true"] {
+            background-color: #2b3138;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+            color: white !important;
+        }
+        [data-testid="stTabs"] [data-baseweb="tab-highlight"] {
+            display: none;
+        }
+        
+        /* 5. Mobile Responsiveness */
+        @media (max-width: 768px) {
+            /* Reduce overall padding on mobile */
+            .main .block-container {
+                padding-top: 2rem !important;
+                padding-left: 1rem !important;
+                padding-right: 1rem !important;
+            }
+            
+            /* Groww-style 2-column grid on mobile */
+            div[data-testid="stHorizontalBlock"] {
+                flex-wrap: wrap;
+                gap: 8px;
+            }
+            [data-testid="column"] {
+                width: calc(50% - 4px) !important;
+                flex: 1 1 calc(50% - 4px) !important;
+                min-width: calc(50% - 4px) !important;
+                margin-bottom: 8px;
+            }
+            
+            /* Scale down fonts for 2-column grid */
+            [data-testid="stMetricValue"] {
+                font-size: 1.1rem !important;
+            }
+            [data-testid="stMetricLabel"] {
+                font-size: 0.75rem !important;
+                white-space: nowrap;
+                overflow: hidden;
+                text-overflow: ellipsis;
+            }
+            [data-testid="stMetricDelta"] {
+                font-size: 0.8rem !important;
+            }
+            
+            /* Make titles smaller on mobile */
+            h1 {
+                font-size: 1.8rem !important;
+                text-align: center;
+            }
+            h3 {
+                font-size: 1.3rem !important;
+                text-align: center;
+            }
+            
+            /* Center tab texts */
+            [data-testid="stTabs"] [data-baseweb="tab-list"] {
+                flex-wrap: wrap;
+                justify-content: center;
+            }
+            [data-testid="stTabs"] [data-baseweb="tab"] {
+                flex: 1;
+                text-align: center;
+                justify-content: center;
+            }
+            
+            /* Metric cards spacing on mobile */
+            [data-testid="stMetric"] {
+                padding: 12px;
+            }
+        }
+        </style>
+    """, unsafe_allow_html=True)
 
 # --- FINANCIAL DISCLAIMER ---
 st.sidebar.markdown("### ⚠️ Disclaimer")
@@ -223,10 +361,224 @@ def train_future_regressor(daily_df, horizon_days):
     
     return future_price_pred, pct_change
 
+@st.cache_data(ttl=600)
+def get_top_performers():
+    try:
+        headers = {'User-Agent': 'Mozilla/5.0'}
+        
+        # API 1: US Top Gainers
+        us_url = "https://query1.finance.yahoo.com/v1/finance/screener/predefined/saved?formatted=false&lang=en-US&region=US&scrIds=day_gainers&count=5"
+        us_res = requests.get(us_url, headers=headers).json()
+        us_quotes = us_res.get('finance', {}).get('result', [{}])[0].get('quotes', [])
+        
+        # API 2: India Top Gainers
+        in_url = "https://query1.finance.yahoo.com/v1/finance/screener/predefined/saved?formatted=false&lang=en-IN&region=IN&scrIds=day_gainers_in&count=5"
+        in_res = requests.get(in_url, headers=headers).json()
+        in_quotes = in_res.get('finance', {}).get('result', [{}])[0].get('quotes', [])
+        
+        combined_quotes = us_quotes + in_quotes
+        
+        performers_list = []
+        for q in combined_quotes:
+            symbol = q.get('symbol')
+            price = q.get('regularMarketPrice')
+            pct_change = q.get('regularMarketChangePercent')
+            
+            if symbol and price is not None and pct_change is not None:
+                performers_list.append({
+                    'Symbol': symbol,
+                    'Price': price,
+                    '% Change': pct_change
+                })
+                
+        performers = pd.DataFrame(performers_list)
+        if performers.empty:
+            return pd.DataFrame()
+            
+        return performers.sort_values(by='% Change', ascending=False).head(10)
+    except Exception as e:
+        return pd.DataFrame()
+
+MARKET_WATCHLIST = [
+    'AAPL', 'MSFT', 'NVDA', 'GOOGL', 'AMZN', 'TSLA', 'META', 'BRK-B', 'V', 'JPM',
+    'WMT', 'MA', 'PG', 'UNH', 'JNJ', 'HD', 'BAC', 'XOM', 'COST', 'CVX',
+    'RELIANCE.NS', 'TCS.NS', 'HDFCBANK.NS', 'INFY.NS', 'ICICIBANK.NS', 'SBIN.NS', 
+    'BHARTIARTL.NS', 'ITC.NS', 'LT.NS', 'BAJFINANCE.NS', 'ATGL.NS', 'HCLTECH.NS',
+    'KOTAKBANK.NS', 'AXISBANK.NS', 'TATAMOTORS.NS', 'MARUTI.NS', 'SUNPHARMA.NS',
+    'ULTRACEMCO.NS', 'ASIANPAINT.NS', 'TITAN.NS', 'ADANIENT.NS', 'ADANIPORTS.NS',
+    'ONGC.NS', 'NTPC.NS', 'POWERGRID.NS', 'BAJAJFINSV.NS', 'M&M.NS', 'TATASTEEL.NS',
+    'NESTLEIND.NS', 'WIPRO.NS', 'INDUSINDBK.NS', 'BAJAJ-AUTO.NS', 'HINDALCO.NS', 'TECHM.NS'
+]
+
+@st.cache_data(ttl=3600)
+def get_historical_top_performers(days_ago=1, indian_only=False, top_n=5):
+    try:
+        # Fetch enough days to cover weekends and holidays
+        period = f"{days_ago + 10}d"
+        data = yf.download(MARKET_WATCHLIST, period=period, progress=False)
+        if data.empty or 'Close' not in data:
+            return pd.DataFrame()
+            
+        close_data = data['Close']
+        
+        # FIX: Filter by region first to avoid ffill copying values across mismatched trading days
+        if indian_only:
+            valid_cols = [c for c in close_data.columns if str(c).endswith('.NS') or str(c).endswith('.BO')]
+            close_data = close_data[valid_cols]
+            
+        # Clean up NaNs specific to this market's trading calendar
+        close_data = close_data.dropna(how='all').ffill()
+        
+        if len(close_data) < days_ago + 1:
+            return pd.DataFrame()
+            
+        # Target day is 'days_ago' from the end. If days_ago=1 (yesterday), it's iloc[-2]
+        # But we need to compare it to the day before that (iloc[-3])
+        target_idx = -1 - days_ago
+        prev_idx = target_idx - 1
+        
+        if abs(prev_idx) > len(close_data):
+            return pd.DataFrame()
+            
+        target_close = close_data.iloc[target_idx]
+        prev_close = close_data.iloc[prev_idx]
+        
+        pct_change = ((target_close - prev_close) / prev_close) * 100
+        
+        performers = pd.DataFrame({
+            'Price': target_close,
+            '% Change': pct_change
+        })
+        if indian_only:
+            performers = performers[performers.index.astype(str).str.endswith('.NS') | performers.index.astype(str).str.endswith('.BO')]
+            
+        return performers.dropna().sort_values(by='% Change', ascending=False).head(top_n)
+    except Exception as e:
+        return pd.DataFrame()
+
+@st.cache_data(ttl=3600)
+def predict_tomorrows_gainers():
+    indian_tickers = [t for t in MARKET_WATCHLIST if str(t).endswith('.NS') or str(t).endswith('.BO')]
+    
+    predictions = []
+    
+    # We need about 1 year of data to have >200 trading days for the backtest split
+    start_dt = date.today() - timedelta(days=365*2)
+    end_dt = date.today()
+    
+    for ticker in indian_tickers:
+        try:
+            df = yf.download(ticker, start=start_dt, end=end_dt, progress=False)
+            processed_df = _process_yf_df(df)
+            
+            if processed_df is not None and len(processed_df) > 220:
+                ml_data, predictors = engineer_features(processed_df, is_live=False)
+                if ml_data is not None and len(ml_data) > 200:
+                    precision, tomorrow_pred, err = train_and_backtest(ml_data, predictors)
+                    
+                    if err is None and tomorrow_pred == 1:
+                        future_price_pred, pct_change = train_future_regressor(processed_df, horizon_days=1)
+                        # Ensure the regressor actually predicts a profit
+                        if pct_change is not None and pct_change > 0:
+                            current_price = processed_df['Close'].iloc[-1]
+                            
+                            # Heuristic for Trading Method Recommendation
+                            if pct_change > 2.5:
+                                method = "Intraday ⚡"
+                            elif pct_change > 1.5 and precision > 0.60:
+                                method = "MTF 📈"
+                            else:
+                                method = "Delivery 🔒"
+                                
+                            predictions.append({
+                                'Symbol': ticker,
+                                'Price': current_price,
+                                'AI Confidence': precision,
+                                'Profit %': pct_change,
+                                'Method': method
+                            })
+        except Exception:
+            continue
+            
+    pred_df = pd.DataFrame(predictions)
+    if not pred_df.empty:
+        # Sort by highest predicted profit percentage instead of just win rate
+        pred_df = pred_df.sort_values(by='Profit %', ascending=False).head(10)
+    return pred_df
+
+def render_top_performers_tab():
+    st.markdown("### 🔮 AI Predictions: Tomorrow's Expected Gainers")
+    st.markdown("Machine Learning forecast for the Top 10 Indian stocks expected to go UP tomorrow.")
+    st.info("⚠️ **DISCLAIMER:** 100% accuracy is mathematically impossible in quantitative finance. These predictions are based on historical probability (Random Forest Classifier backtests). Do not treat this as guaranteed financial advice.", icon="⚠️")
+    
+    with st.spinner("Training Machine Learning models for all watchlist stocks... (This takes ~30 seconds)"):
+        ai_predictions = predict_tomorrows_gainers()
+        
+    if ai_predictions.empty:
+        st.warning("The AI did not find any high-confidence setups for tomorrow.")
+    else:
+        cols_ai = st.columns(5)
+        for idx, row in ai_predictions.iterrows():
+            col = cols_ai[idx % 5]
+            with col:
+                ticker = row['Symbol']
+                currency = "₹" if str(ticker).endswith(".NS") or str(ticker).endswith(".BO") else "$"
+                st.metric(
+                    label=ticker,
+                    value=f"{currency}{row['Price']:.2f}",
+                    delta=f"{row['Profit %']:+.2f}%",
+                    delta_color="normal"
+                )
+                st.caption(f"Win Rate: {row['AI Confidence']*100:.1f}%<br>Type: {row['Method']}", unsafe_allow_html=True)
+    
+    st.markdown("---")
+
+    st.markdown("### 🔥 Global Top 10 Best Performing Stocks Today")
+    st.markdown("Dynamically scanning the absolute top gainers across US and Indian markets.")
+    
+    with st.spinner("Fetching live market data..."):
+        top_stocks = get_top_performers()
+        
+    if top_stocks.empty:
+        st.error("Failed to fetch market data from APIs. Please try again later.")
+        return
+        
+    cols = st.columns(5)
+    for idx, row in top_stocks.iterrows():
+        col = cols[idx % 5]
+        with col:
+            ticker = row['Symbol']
+            currency = "₹" if ticker.endswith(".NS") or ticker.endswith(".BO") else "$"
+            st.metric(
+                label=ticker,
+                value=f"{currency}{row['Price']:.2f}",
+                delta=f"{row['% Change']:+.2f}%"
+            )
+
+    st.markdown("---")
+    st.markdown("### ⏪ Yesterday's Top 10 Indian Performers")
+    st.markdown("Calculated from a curated watchlist of NIFTY 50 / Major Indian Stocks.")
+    
+    with st.spinner("Calculating historical data..."):
+        historical_stocks = get_historical_top_performers(days_ago=1, indian_only=True, top_n=10)
+        
+    if historical_stocks.empty:
+        st.warning("Historical data is currently unavailable.")
+        return
+        
+    cols_hist = st.columns(5)
+    for idx, (ticker, row) in enumerate(historical_stocks.iterrows()):
+        col = cols_hist[idx % 5]
+        with col:
+            currency = "₹" if str(ticker).endswith(".NS") or str(ticker).endswith(".BO") else "$"
+            st.metric(
+                label=str(ticker),
+                value=f"{currency}{row['Price']:.2f}",
+                delta=f"{row['% Change']:+.2f}%"
+            )
+
 # --- MAIN APP FLOW ---
-def main():
-    st.title("📈 Quantitative Stock Analysis & Prediction")
-    st.markdown("A production-grade machine learning pipeline for time-series equity forecasting.")
+def render_predictor_tab():
 
     if not ticker_input:
         st.warning("Please enter a valid stock ticker in the sidebar.")
@@ -413,6 +765,19 @@ def main():
         import time
         time.sleep(10)
         st.rerun()
+
+def main():
+    inject_custom_css()
+    st.title("📈 Quantitative Stock Analysis & Prediction")
+    st.markdown("A production-grade machine learning pipeline for time-series equity forecasting.")
+
+    tab1, tab2 = st.tabs(["🤖 Predictor Engine", "🔥 Top Performing Stocks"])
+    
+    with tab1:
+        render_predictor_tab()
+        
+    with tab2:
+        render_top_performers_tab()
 
 if __name__ == "__main__":
     main()
