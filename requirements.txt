@@ -21,3 +21,4 @@ pandas
 numpy
 plotly
 requests
+scikit-learn
